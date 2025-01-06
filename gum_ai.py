@@ -128,13 +128,35 @@ def predict_occupied_trainers(hour, total_visitors, cardio_ratio=0.25):
 
     return occupied_cardio, occupied_strength
 
-# Оновлення функції для прогнозу
+def get_comfort_level_cardio(occupied_cardio):
+    """Оцінка комфортності для кардіо тренажерів."""
+    if occupied_cardio > 50:
+        return "Некомфортно"
+    return "Комфортно"
+
+def get_comfort_level_strength(occupied_strength):
+    """Оцінка комфортності для силових тренажерів."""
+    if occupied_strength < 150:
+        return "Комфортно"
+    elif 150 <= occupied_strength <= 275:
+        return "Терпимо"
+    return "Некомфортно"
+
+def get_comfort_level_total(occupied_cardio, occupied_strength):
+    """Оцінка загальної комфортності тренажерів."""
+    total_occupied = occupied_cardio + occupied_strength
+    if total_occupied <= 200:
+        return "Комфортно"
+    elif 200 < total_occupied <= 325:
+        return "Тяжко, але можна"
+    return "Некомфортно"
+
 def predict_comfort(arrival_time, is_cardio_input):
     is_cardio = 1 if is_cardio_input.lower() == 'так' else 0
     user_input = np.array([[time_to_minutes(arrival_time), is_cardio]])
     user_input_scaled = scaler.transform(user_input)
     
-    # Прогнозуємо комфортність
+    # Прогнозуємо комфортність з використанням нейромережі
     comfort = model.predict(user_input_scaled)[0][0]
 
     # Підраховуємо кількість відвідувачів з gum_visitors_time
@@ -144,18 +166,28 @@ def predict_comfort(arrival_time, is_cardio_input):
     # Прогнозуємо кількість зайнятих тренажерів на основі кількості відвідувачів
     occupied_cardio, occupied_strength = predict_occupied_trainers(hour, visitor_count)
     
-    # Перевіряємо, чи кількість зайнятих тренажерів не перевищує доступну кількість
-    total_occupied_trainers = occupied_cardio + occupied_strength
-    if total_occupied_trainers >= TOTAL_TRAINERS:
-        print(f"Зайнято тренажерів: {total_occupied_trainers} з {TOTAL_TRAINERS}. Це НЕ комфортно!")
-        comfort = 0  # Встановлюємо комфорт на "не комфортно"
+    # Оцінка для кардіо
+    comfort_cardio = get_comfort_level_cardio(occupied_cardio)
+    
+    # Оцінка для силових тренажерів
+    comfort_strength = get_comfort_level_strength(occupied_strength)
+    
+    # Оцінка для загальної кількості тренажерів
+    comfort_total = get_comfort_level_total(occupied_cardio, occupied_strength)
+    
+    # Загальна комфортність, яка бере до уваги нейромережу
+    if comfort >= 0.5:
+        neural_net_comfort = "Комфортно"
+    else:
+        neural_net_comfort = "Не комфортно"
     
     # Виведення результатів
     print(f"Кількість відвідувачів у залі на час {arrival_time}: {visitor_count}")
-    print(f"Зайнято кардіо-тренажерів: {occupied_cardio} з {CARDIO_TRAINERS}")
-    print(f"Зайнято силових тренажерів: {occupied_strength} з {STRENGTH_TRAINERS}")
-    print(f"Загальна кількість зайнятих тренажерів: {occupied_cardio + occupied_strength} з {TOTAL_TRAINERS}")
-    print(f"Шкала комфортності: {'Комфортно' if comfort >= 0.5 else 'Не комфортно'}")
+    print(f"Зайнято кардіо-тренажерів: {occupied_cardio} з {CARDIO_TRAINERS} - {comfort_cardio}")
+    print(f"Зайнято силових тренажерів: {occupied_strength} з {STRENGTH_TRAINERS} - {comfort_strength}")
+    print(f"Загальна кількість зайнятих тренажерів: {occupied_cardio + occupied_strength} з {TOTAL_TRAINERS} - {comfort_total}")
+    print(f"Шкала комфортності (від нейромережі): {neural_net_comfort}")
+    print(f"Загальна оцінка комфортності: {comfort_total} (з нейромережею: {neural_net_comfort})")
 
 # Запит користувача
 arrival_time_input = input("Введіть час приходу (формат год:хв, наприклад, 10.30): ")
