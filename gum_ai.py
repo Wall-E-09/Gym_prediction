@@ -104,7 +104,24 @@ model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy']
 # Навчання моделі
 model.fit(X_train, np.array(y_train), epochs=50, batch_size=16, validation_data=(X_test, np.array(y_test)))
 
-# Оновлене використання даних з gum_visitors_time для прогнозування
+# Функція для прогнозування зайнятих тренажерів
+def predict_occupied_trainers(hour, total_visitors, cardio_ratio=0.25):
+    """
+    Функція прогнозує кількість зайнятих тренажерів на основі кількості відвідувачів і співвідношення кардіо/сили.
+    - hour: година, на яку потрібно зробити прогноз
+    - total_visitors: загальна кількість відвідувачів на цей час
+    - cardio_ratio: співвідношення відвідувачів, які займаються кардіо (за замовчуванням 25%)
+    """
+    cardio_visitors = int(total_visitors * cardio_ratio)  # Загальна кількість відвідувачів на кардіо
+    strength_visitors = total_visitors - cardio_visitors  # Всі інші займаються силовими тренажерами
+    
+    # Прогнозуємо кількість зайнятих тренажерів для кардіо та силових тренувань
+    occupied_cardio = min(cardio_visitors, CARDIO_TRAINERS)
+    occupied_strength = min(strength_visitors, STRENGTH_TRAINERS)
+    
+    return occupied_cardio, occupied_strength
+
+# Оновлення функції для прогнозу
 def predict_comfort(arrival_time, is_cardio_input):
     is_cardio = 1 if is_cardio_input.lower() == 'так' else 0
     user_input = np.array([[time_to_minutes(arrival_time), is_cardio]])
@@ -115,19 +132,13 @@ def predict_comfort(arrival_time, is_cardio_input):
 
     # Підраховуємо кількість відвідувачів з gum_visitors_time
     hour = int(arrival_time.split('.')[0])
-    visitor_count = get_visitor_count_at_time(hour)
+    visitor_count = get_visitor_count_at_time(hour)  # Отримуємо кількість відвідувачів для цієї години
+    
+    # Прогнозуємо кількість зайнятих тренажерів на основі кількості відвідувачів
+    occupied_cardio, occupied_strength = predict_occupied_trainers(hour, visitor_count)
     
     # Виведення результатів
     print(f"Кількість відвідувачів у залі на час {arrival_time}: {visitor_count}")
-    
-    # Підраховуємо зайнятих тренажерів
-    existing_visitors = data_visitors[(data_visitors['Час прийшли хвилини'] <= time_to_minutes(arrival_time)) & 
-                                      (data_visitors['Час вийшли хвилини'] > time_to_minutes(arrival_time))]
-    
-    occupied_cardio, occupied_strength = get_occupied_trainers(arrival_time, is_cardio, existing_visitors)
-    
-    # Виведення результатів
-    print(f"Час приходу: {arrival_time}")
     print(f"Зайнято кардіо-тренажерів: {occupied_cardio} з {CARDIO_TRAINERS}")
     print(f"Зайнято силових тренажерів: {occupied_strength} з {STRENGTH_TRAINERS}")
     print(f"Загальна кількість зайнятих тренажерів: {occupied_cardio + occupied_strength} з {TOTAL_TRAINERS}")
