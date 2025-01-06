@@ -104,7 +104,6 @@ model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy']
 # Навчання моделі
 model.fit(X_train, np.array(y_train), epochs=50, batch_size=16, validation_data=(X_test, np.array(y_test)))
 
-# Функція для прогнозування зайнятих тренажерів
 def predict_occupied_trainers(hour, total_visitors, cardio_ratio=0.25):
     """
     Функція прогнозує кількість зайнятих тренажерів на основі кількості відвідувачів і співвідношення кардіо/сили.
@@ -115,10 +114,18 @@ def predict_occupied_trainers(hour, total_visitors, cardio_ratio=0.25):
     cardio_visitors = int(total_visitors * cardio_ratio)  # Загальна кількість відвідувачів на кардіо
     strength_visitors = total_visitors - cardio_visitors  # Всі інші займаються силовими тренажерами
     
-    # Прогнозуємо кількість зайнятих тренажерів для кардіо та силових тренувань
+    # Якщо людей більше, ніж тренажерів, то кожен тренажер буде "завантажений" на 100%
     occupied_cardio = min(cardio_visitors, CARDIO_TRAINERS)
     occupied_strength = min(strength_visitors, STRENGTH_TRAINERS)
     
+    # Обчислення того, скільки тренажерів буде зайнято пропорційно відвідувачам
+    extra_visitors = total_visitors - (CARDIO_TRAINERS + STRENGTH_TRAINERS)
+    if extra_visitors > 0:
+        extra_cardio = int(extra_visitors * cardio_ratio)
+        extra_strength = extra_visitors - extra_cardio
+        occupied_cardio += extra_cardio
+        occupied_strength += extra_strength
+
     return occupied_cardio, occupied_strength
 
 # Оновлення функції для прогнозу
@@ -136,6 +143,12 @@ def predict_comfort(arrival_time, is_cardio_input):
     
     # Прогнозуємо кількість зайнятих тренажерів на основі кількості відвідувачів
     occupied_cardio, occupied_strength = predict_occupied_trainers(hour, visitor_count)
+    
+    # Перевіряємо, чи кількість зайнятих тренажерів не перевищує доступну кількість
+    total_occupied_trainers = occupied_cardio + occupied_strength
+    if total_occupied_trainers >= TOTAL_TRAINERS:
+        print(f"Зайнято тренажерів: {total_occupied_trainers} з {TOTAL_TRAINERS}. Це НЕ комфортно!")
+        comfort = 0  # Встановлюємо комфорт на "не комфортно"
     
     # Виведення результатів
     print(f"Кількість відвідувачів у залі на час {arrival_time}: {visitor_count}")

@@ -6,7 +6,7 @@ import random
 from datetime import datetime, timedelta
 
 # Кількість відвідувачів
-num_visitors = 2000
+num_visitors = 1000
 
 # Функція для перетворення часу у форматі "години.хвилини" в хвилини
 def time_to_minutes(time_str):
