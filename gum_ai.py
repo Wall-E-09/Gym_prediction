@@ -2,15 +2,18 @@ import pandas as pd
 import numpy as np
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
+from tensorflow.keras.losses import MeanSquaredError
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 # Завантажуємо дані з обох файлів
 file_path_visitors = r'C:\Users\Home\Documents\GitHub\KPRS_RGR\gum_visitors.csv'
 file_path_visitors_time = r'C:\Users\Home\Documents\GitHub\KPRS_RGR\gum_visitors_time.csv'
+file_path_visitor_ratings = r'C:\Users\Home\Documents\GitHub\KPRS_RGR\visitor_data.csv'
 
 data_visitors = pd.read_csv(file_path_visitors)
 data_visitors_time = pd.read_csv(file_path_visitors_time)
+data_visitor_ratings = pd.read_csv(file_path_visitor_ratings)
 
 # Перевірка структури даних
 print("Структура даних для gum_visitors:")
@@ -18,6 +21,9 @@ print(data_visitors.head())  # Переглядаємо перші кілька 
 
 print("Структура даних для gum_visitors_time:")
 print(data_visitors_time.head())  # Переглядаємо перші кілька рядків з gum_visitors_time
+
+print("Структура даних для visitor_data:")
+print(data_visitor_ratings.head())  # Переглядаємо перші кілька рядків з visitor_data
 
 # Константи
 TOTAL_TRAINERS = 200
@@ -96,13 +102,13 @@ X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, 
 model = Sequential()
 model.add(Dense(64, input_dim=2, activation='relu'))
 model.add(Dense(32, activation='relu'))
-model.add(Dense(1, activation='sigmoid'))  # Вихід: 0 - не комфортно, 1 - комфортно
+model.add(Dense(1, activation='linear'))  # Вихід: 0 - не комфортно, 1 - комфортно
 
 # Компіляція моделі
-model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+model.compile(loss=MeanSquaredError(), optimizer='adam', metrics=['accuracy'])  # Використовуємо середнє квадратичне відхилення для регресії
 
 # Навчання моделі
-model.fit(X_train, np.array(y_train), epochs=50, batch_size=16, validation_data=(X_test, np.array(y_test)))
+model.fit(X_train, np.array(y_train), epochs=10, batch_size=16, validation_data=(X_test, np.array(y_test)))
 
 def predict_occupied_trainers(hour, total_visitors, cardio_ratio=0.25):
     """
@@ -139,7 +145,7 @@ def get_comfort_level_strength(occupied_strength):
     if occupied_strength < 150:
         return "Комфортно"
     elif 150 <= occupied_strength <= 275:
-        return "Терпимо"
+        return "Жити можна"
     return "Некомфортно"
 
 def get_comfort_level_total(occupied_cardio, occupied_strength):
@@ -151,16 +157,46 @@ def get_comfort_level_total(occupied_cardio, occupied_strength):
         return "Тяжко, але можна"
     return "Некомфортно"
 
+# Додаємо функцію для перевірки правильності введеного часу
+def validate_time_format(time_str):
+    try:
+        hour, minute = map(int, time_str.split('.'))
+        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+            print("Помилка: година повинна бути в діапазоні 0-23, а хвилина - 0-59.")
+            return False
+        return True
+    except ValueError:
+        print("Помилка: введіть час у форматі год:хв, наприклад, 10.30.")
+        return False
+
+# Функція для перевірки графіку роботи залу
+def is_within_operating_hours(hour):
+    # Припустимо, що зал працює з 8:00 до 22:00
+    if 8 <= hour <= 22:
+        return True
+    else:
+        print("Помилка: час повинен бути в межах робочих годин залу (з 8:00 до 22:00).")
+        return False
+
+# Основна функція прогнозування комфортності з перевірками
 def predict_comfort(arrival_time, is_cardio_input):
+    # Перевірка формату часу
+    if not validate_time_format(arrival_time):
+        return
+    
+    hour = int(arrival_time.split('.')[0])
+    # Перевірка, чи потрапляє час у робочі години залу
+    if not is_within_operating_hours(hour):
+        return
+    
     is_cardio = 1 if is_cardio_input.lower() == 'так' else 0
     user_input = np.array([[time_to_minutes(arrival_time), is_cardio]])
     user_input_scaled = scaler.transform(user_input)
     
-    # Прогнозуємо комфортність з використанням нейромережі
+    # Прогнозуємо комфортність з використанням нейромережі (тепер у діапазоні від 0 до 10)
     comfort = model.predict(user_input_scaled)[0][0]
 
     # Підраховуємо кількість відвідувачів з gum_visitors_time
-    hour = int(arrival_time.split('.')[0])
     visitor_count = get_visitor_count_at_time(hour)  # Отримуємо кількість відвідувачів для цієї години
     
     # Прогнозуємо кількість зайнятих тренажерів на основі кількості відвідувачів
@@ -175,19 +211,13 @@ def predict_comfort(arrival_time, is_cardio_input):
     # Оцінка для загальної кількості тренажерів
     comfort_total = get_comfort_level_total(occupied_cardio, occupied_strength)
     
-    # Загальна комфортність, яка бере до уваги нейромережу
-    if comfort >= 0.5:
-        neural_net_comfort = "Комфортно"
-    else:
-        neural_net_comfort = "Не комфортно"
-    
     # Виведення результатів
     print(f"Кількість відвідувачів у залі на час {arrival_time}: {visitor_count}")
     print(f"Зайнято кардіо-тренажерів: {occupied_cardio} з {CARDIO_TRAINERS} - {comfort_cardio}")
     print(f"Зайнято силових тренажерів: {occupied_strength} з {STRENGTH_TRAINERS} - {comfort_strength}")
     print(f"Загальна кількість зайнятих тренажерів: {occupied_cardio + occupied_strength} з {TOTAL_TRAINERS} - {comfort_total}")
-    print(f"Шкала комфортності (від нейромережі): {neural_net_comfort}")
-    print(f"Загальна оцінка комфортності: {comfort_total} (з нейромережею: {neural_net_comfort})")
+    print(f"Прогнозоване значення комфортності (шкала від 0 до 100): {comfort:.2f}")
+    print(f"Загальна оцінка комфортності: {comfort_total}")
 
 # Запит користувача
 arrival_time_input = input("Введіть час приходу (формат год:хв, наприклад, 10.30): ")
