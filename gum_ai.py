@@ -1,14 +1,23 @@
 import pandas as pd
-import random
 import numpy as np
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-# Завантажуємо дані з файлу
-file_path = r'C:\Users\Home\Documents\GitHub\KPRS_RGR\gum_visitors.csv'
-data = pd.read_csv(file_path)
+# Завантажуємо дані з обох файлів
+file_path_visitors = r'C:\Users\Home\Documents\GitHub\KPRS_RGR\gum_visitors.csv'
+file_path_visitors_time = r'C:\Users\Home\Documents\GitHub\KPRS_RGR\gum_visitors_time.csv'
+
+data_visitors = pd.read_csv(file_path_visitors)
+data_visitors_time = pd.read_csv(file_path_visitors_time)
+
+# Перевірка структури даних
+print("Структура даних для gum_visitors:")
+print(data_visitors.head())  # Переглядаємо перші кілька рядків з gum_visitors
+
+print("Структура даних для gum_visitors_time:")
+print(data_visitors_time.head())  # Переглядаємо перші кілька рядків з gum_visitors_time
 
 # Константи
 TOTAL_TRAINERS = 200
@@ -24,39 +33,51 @@ def time_to_minutes(time_str):
     else:
         return 0  # Якщо значення не рядок, повертаємо 0
 
-# Функція для визначення, чи буде комфортно тренуватися
-def is_comfortable(arrival_time, is_cardio, existing_visitors):
+# Функція для підрахунку кількості відвідувачів по часу з gum_visitors_time
+def get_visitor_count_at_time(hour):
+    # Перевіряємо кількість відвідувачів у таблиці gum_visitors_time на дану годину
+    visitor_count = data_visitors_time[data_visitors_time['Година'] == hour]['Кількість відвідувачів'].values
+    return visitor_count[0] if len(visitor_count) > 0 else 0
+
+# Функція для визначення, скільки тренажерів буде зайнято в цей час
+def get_occupied_trainers(arrival_time, is_cardio, existing_visitors):
     arrival_minutes = time_to_minutes(arrival_time)
     
-    # Визначаємо, скільки тренажерів буде зайнято в цей час
+    # Підраховуємо зайняті кардіо-тренажери
     occupied_cardio = sum(1 for _, visitor in existing_visitors.iterrows() 
-                          if visitor['Кардіо'] == 'Так' and time_to_minutes(visitor['Час прийшли']) <= arrival_minutes < time_to_minutes(visitor['Час вийшли']))
+                          if visitor['Кардіо'] == 'Так' and 
+                             time_to_minutes(visitor['Час прийшли']) < arrival_minutes < time_to_minutes(visitor['Час вийшли']))
+    
+    # Підраховуємо зайняті силові тренажери
     occupied_strength = sum(1 for _, visitor in existing_visitors.iterrows() 
-                            if visitor['Кардіо'] == 'Ні' and time_to_minutes(visitor['Час прийшли']) <= arrival_minutes < time_to_minutes(visitor['Час вийшли']))
+                            if visitor['Кардіо'] == 'Ні' and 
+                               time_to_minutes(visitor['Час прийшли']) < arrival_minutes < time_to_minutes(visitor['Час вийшли']))
     
-    if is_cardio:
-        if occupied_cardio < CARDIO_TRAINERS:
-            return True
-    else:
-        if occupied_strength < STRENGTH_TRAINERS:
-            return True
-    
-    return False
+    return occupied_cardio, occupied_strength
 
 # Підготовка даних для навчання
 X = []
 y = []
 
-data['Час прийшли хвилини'] = data['Час прийшли'].apply(time_to_minutes)
-data['Час вийшли хвилини'] = data['Час вийшли'].apply(time_to_minutes)
+data_visitors['Час прийшли хвилини'] = data_visitors['Час прийшли'].apply(time_to_minutes)
+data_visitors['Час вийшли хвилини'] = data_visitors['Час вийшли'].apply(time_to_minutes)
 
-for _, row in data.iterrows():
+for _, row in data_visitors.iterrows():
     arrival_time = row['Час прийшли']
     is_cardio = 1 if row['Кардіо'] == 'Так' else 0
     departure_time = row['Час вийшли']
-    existing_visitors = data[(data['Час прийшли хвилини'] <= arrival_time) & (data['Час вийшли хвилини'] > arrival_time)]
+    existing_visitors = data_visitors[(data_visitors['Час прийшли хвилини'] <= arrival_time) & 
+                                      (data_visitors['Час вийшли хвилини'] > arrival_time)]
     
-    comfortable = is_comfortable(arrival_time, is_cardio, existing_visitors)
+    occupied_cardio, occupied_strength = get_occupied_trainers(arrival_time, is_cardio, existing_visitors)
+    
+    comfortable = False
+    if is_cardio:
+        if occupied_cardio < CARDIO_TRAINERS:
+            comfortable = True
+    else:
+        if occupied_strength < STRENGTH_TRAINERS:
+            comfortable = True
     
     X.append([arrival_time, is_cardio])
     y.append(comfortable)
@@ -83,19 +104,38 @@ model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy']
 # Навчання моделі
 model.fit(X_train, np.array(y_train), epochs=50, batch_size=16, validation_data=(X_test, np.array(y_test)))
 
-# Функція для запиту користувача та прогнозування
+# Оновлене використання даних з gum_visitors_time для прогнозування
 def predict_comfort(arrival_time, is_cardio_input):
     is_cardio = 1 if is_cardio_input.lower() == 'так' else 0
     user_input = np.array([[time_to_minutes(arrival_time), is_cardio]])
     user_input_scaled = scaler.transform(user_input)
     
+    # Прогнозуємо комфортність
     comfort = model.predict(user_input_scaled)[0][0]
-    return "Комфортно" if comfort >= 0.5 else "Не комфортно"
+
+    # Підраховуємо кількість відвідувачів з gum_visitors_time
+    hour = int(arrival_time.split('.')[0])
+    visitor_count = get_visitor_count_at_time(hour)
+    
+    # Виведення результатів
+    print(f"Кількість відвідувачів у залі на час {arrival_time}: {visitor_count}")
+    
+    # Підраховуємо зайнятих тренажерів
+    existing_visitors = data_visitors[(data_visitors['Час прийшли хвилини'] <= time_to_minutes(arrival_time)) & 
+                                      (data_visitors['Час вийшли хвилини'] > time_to_minutes(arrival_time))]
+    
+    occupied_cardio, occupied_strength = get_occupied_trainers(arrival_time, is_cardio, existing_visitors)
+    
+    # Виведення результатів
+    print(f"Час приходу: {arrival_time}")
+    print(f"Зайнято кардіо-тренажерів: {occupied_cardio} з {CARDIO_TRAINERS}")
+    print(f"Зайнято силових тренажерів: {occupied_strength} з {STRENGTH_TRAINERS}")
+    print(f"Загальна кількість зайнятих тренажерів: {occupied_cardio + occupied_strength} з {TOTAL_TRAINERS}")
+    print(f"Шкала комфортності: {'Комфортно' if comfort >= 0.5 else 'Не комфортно'}")
 
 # Запит користувача
 arrival_time_input = input("Введіть час приходу (формат год:хв, наприклад, 10.30): ")
 is_cardio_input = input("Чи робите ви кардіо? (так/ні): ")
 
 # Прогнозування комфортності
-result = predict_comfort(arrival_time_input, is_cardio_input)
-print(result)
+predict_comfort(arrival_time_input, is_cardio_input)
