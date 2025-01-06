@@ -6,7 +6,6 @@ from tensorflow.keras.losses import MeanSquaredError
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-# Завантажуємо дані з обох файлів
 file_path_visitors = r'C:\Users\Home\Documents\GitHub\KPRS_RGR\gum_visitors.csv'
 file_path_visitors_time = r'C:\Users\Home\Documents\GitHub\KPRS_RGR\gum_visitors_time.csv'
 file_path_visitor_ratings = r'C:\Users\Home\Documents\GitHub\KPRS_RGR\visitor_data.csv'
@@ -15,53 +14,43 @@ data_visitors = pd.read_csv(file_path_visitors)
 data_visitors_time = pd.read_csv(file_path_visitors_time)
 data_visitor_ratings = pd.read_csv(file_path_visitor_ratings)
 
-# Перевірка структури даних
 print("Структура даних для gum_visitors:")
-print(data_visitors.head())  # Переглядаємо перші кілька рядків з gum_visitors
+print(data_visitors.head())  
 
 print("Структура даних для gum_visitors_time:")
-print(data_visitors_time.head())  # Переглядаємо перші кілька рядків з gum_visitors_time
+print(data_visitors_time.head())  
 
 print("Структура даних для visitor_data:")
-print(data_visitor_ratings.head())  # Переглядаємо перші кілька рядків з visitor_data
+print(data_visitor_ratings.head())  
 
-# Константи
 TOTAL_TRAINERS = 200
 CARDIO_TRAINERS = 50
 STRENGTH_TRAINERS = 150
-CARDIO_DURATION = 20  # хвилин
+CARDIO_DURATION = 20  
 
-# Функція для переведення часу в хвилини
 def time_to_minutes(time_str):
     if isinstance(time_str, str):
         hour, minute = map(int, time_str.split('.'))
         return hour * 60 + minute
     else:
-        return 0  # Якщо значення не рядок, повертаємо 0
+        return 0  
 
-# Функція для підрахунку кількості відвідувачів по часу з gum_visitors_time
 def get_visitor_count_at_time(hour):
-    # Перевіряємо кількість відвідувачів у таблиці gum_visitors_time на дану годину
     visitor_count = data_visitors_time[data_visitors_time['Година'] == hour]['Кількість відвідувачів'].values
     return visitor_count[0] if len(visitor_count) > 0 else 0
 
-# Функція для визначення, скільки тренажерів буде зайнято в цей час
 def get_occupied_trainers(arrival_time, is_cardio, existing_visitors):
     arrival_minutes = time_to_minutes(arrival_time)
-    
-    # Підраховуємо зайняті кардіо-тренажери
     occupied_cardio = sum(1 for _, visitor in existing_visitors.iterrows() 
                           if visitor['Кардіо'] == 'Так' and 
                              time_to_minutes(visitor['Час прийшли']) < arrival_minutes < time_to_minutes(visitor['Час вийшли']))
     
-    # Підраховуємо зайняті силові тренажери
     occupied_strength = sum(1 for _, visitor in existing_visitors.iterrows() 
                             if visitor['Кардіо'] == 'Ні' and 
                                time_to_minutes(visitor['Час прийшли']) < arrival_minutes < time_to_minutes(visitor['Час вийшли']))
     
     return occupied_cardio, occupied_strength
 
-# Підготовка даних для навчання
 X = []
 y = []
 
@@ -88,43 +77,29 @@ for _, row in data_visitors.iterrows():
     X.append([arrival_time, is_cardio])
     y.append(comfortable)
 
-# Стандартизуємо дані
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# Переконаємось, що X_scaled має правильну форму
 X_scaled = np.array(X_scaled)
 
-# Розділяємо на тренувальну та тестову вибірки
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-# Створення нейронної мережі
 model = Sequential()
 model.add(Dense(64, input_dim=2, activation='relu'))
 model.add(Dense(32, activation='relu'))
-model.add(Dense(1, activation='linear'))  # Вихід: 0 - не комфортно, 1 - комфортно
+model.add(Dense(1, activation='linear'))  
 
-# Компіляція моделі
-model.compile(loss=MeanSquaredError(), optimizer='adam', metrics=['accuracy'])  # Використовуємо середнє квадратичне відхилення для регресії
+model.compile(loss=MeanSquaredError(), optimizer='adam', metrics=['accuracy'])  
 
-# Навчання моделі
 model.fit(X_train, np.array(y_train), epochs=10, batch_size=16, validation_data=(X_test, np.array(y_test)))
 
 def predict_occupied_trainers(hour, total_visitors, cardio_ratio=0.25):
-    """
-    Функція прогнозує кількість зайнятих тренажерів на основі кількості відвідувачів і співвідношення кардіо/сили.
-    - hour: година, на яку потрібно зробити прогноз
-    - total_visitors: загальна кількість відвідувачів на цей час
-    - cardio_ratio: співвідношення відвідувачів, які займаються кардіо (за замовчуванням 25%)
-    """
-    cardio_visitors = int(total_visitors * cardio_ratio)  # Загальна кількість відвідувачів на кардіо
-    strength_visitors = total_visitors - cardio_visitors  # Всі інші займаються силовими тренажерами
-    
-    # Якщо людей більше, ніж тренажерів, то кожен тренажер буде "завантажений" на 100%
+    cardio_visitors = int(total_visitors * cardio_ratio)  
+    strength_visitors = total_visitors - cardio_visitors  
+
     occupied_cardio = min(cardio_visitors, CARDIO_TRAINERS)
     occupied_strength = min(strength_visitors, STRENGTH_TRAINERS)
     
-    # Обчислення того, скільки тренажерів буде зайнято пропорційно відвідувачам
     extra_visitors = total_visitors - (CARDIO_TRAINERS + STRENGTH_TRAINERS)
     if extra_visitors > 0:
         extra_cardio = int(extra_visitors * cardio_ratio)
@@ -135,13 +110,11 @@ def predict_occupied_trainers(hour, total_visitors, cardio_ratio=0.25):
     return occupied_cardio, occupied_strength
 
 def get_comfort_level_cardio(occupied_cardio):
-    """Оцінка комфортності для кардіо тренажерів."""
     if occupied_cardio > 50:
         return "Некомфортно"
     return "Комфортно"
 
 def get_comfort_level_strength(occupied_strength):
-    """Оцінка комфортності для силових тренажерів."""
     if occupied_strength < 150:
         return "Комфортно"
     elif 150 <= occupied_strength <= 275:
@@ -149,7 +122,6 @@ def get_comfort_level_strength(occupied_strength):
     return "Некомфортно"
 
 def get_comfort_level_total(occupied_cardio, occupied_strength):
-    """Оцінка загальної комфортності тренажерів."""
     total_occupied = occupied_cardio + occupied_strength
     if total_occupied <= 200:
         return "Комфортно"
@@ -157,7 +129,6 @@ def get_comfort_level_total(occupied_cardio, occupied_strength):
         return "Тяжко, але можна"
     return "Некомфортно"
 
-# Додаємо функцію для перевірки правильності введеного часу
 def validate_time_format(time_str):
     try:
         hour, minute = map(int, time_str.split('.'))
@@ -169,23 +140,18 @@ def validate_time_format(time_str):
         print("Помилка: введіть час у форматі год:хв, наприклад, 10.30.")
         return False
 
-# Функція для перевірки графіку роботи залу
 def is_within_operating_hours(hour):
-    # Припустимо, що зал працює з 8:00 до 22:00
     if 8 <= hour <= 22:
         return True
     else:
         print("Помилка: час повинен бути в межах робочих годин залу (з 8:00 до 22:00).")
         return False
 
-# Основна функція прогнозування комфортності з перевірками
 def predict_comfort(arrival_time, is_cardio_input):
-    # Перевірка формату часу
     if not validate_time_format(arrival_time):
         return
     
     hour = int(arrival_time.split('.')[0])
-    # Перевірка, чи потрапляє час у робочі години залу
     if not is_within_operating_hours(hour):
         return
     
@@ -193,25 +159,18 @@ def predict_comfort(arrival_time, is_cardio_input):
     user_input = np.array([[time_to_minutes(arrival_time), is_cardio]])
     user_input_scaled = scaler.transform(user_input)
     
-    # Прогнозуємо комфортність з використанням нейромережі (тепер у діапазоні від 0 до 10)
     comfort = model.predict(user_input_scaled)[0][0]
 
-    # Підраховуємо кількість відвідувачів з gum_visitors_time
-    visitor_count = get_visitor_count_at_time(hour)  # Отримуємо кількість відвідувачів для цієї години
+    visitor_count = get_visitor_count_at_time(hour)  
     
-    # Прогнозуємо кількість зайнятих тренажерів на основі кількості відвідувачів
     occupied_cardio, occupied_strength = predict_occupied_trainers(hour, visitor_count)
     
-    # Оцінка для кардіо
     comfort_cardio = get_comfort_level_cardio(occupied_cardio)
     
-    # Оцінка для силових тренажерів
     comfort_strength = get_comfort_level_strength(occupied_strength)
     
-    # Оцінка для загальної кількості тренажерів
     comfort_total = get_comfort_level_total(occupied_cardio, occupied_strength)
     
-    # Виведення результатів
     print(f"Кількість відвідувачів у залі на час {arrival_time}: {visitor_count}")
     print(f"Зайнято кардіо-тренажерів: {occupied_cardio} з {CARDIO_TRAINERS} - {comfort_cardio}")
     print(f"Зайнято силових тренажерів: {occupied_strength} з {STRENGTH_TRAINERS} - {comfort_strength}")
@@ -219,9 +178,7 @@ def predict_comfort(arrival_time, is_cardio_input):
     print(f"Прогнозоване значення комфортності (шкала від 0 до 100): {comfort:.2f}")
     print(f"Загальна оцінка комфортності: {comfort_total}")
 
-# Запит користувача
 arrival_time_input = input("Введіть час приходу (формат год:хв, наприклад, 10.30): ")
 is_cardio_input = input("Чи робите ви кардіо? (так/ні): ")
 
-# Прогнозування комфортності
 predict_comfort(arrival_time_input, is_cardio_input)
