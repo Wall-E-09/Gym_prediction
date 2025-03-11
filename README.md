@@ -4,16 +4,13 @@ This project is designed to predict and analyze gym-related data, helping users 
 
 ## 📌 Features
 - Predicts gym-related outcomes based on input data
-- Data visualization for better insights
 - User-friendly interface for data entry and analysis
 - Uses machine learning for accurate predictions
 
 ## 🛠 Technologies Used
 - **Python** – Core programming language
-- **TensorFlow / PyTorch** – Machine learning framework
+- **TensorFlow** – Machine learning framework
 - **Pandas & NumPy** – Data processing and analysis
-- **Matplotlib & Seaborn** – Data visualization
-- **Flask / FastAPI** (if applicable) – Backend for serving predictions
 
 ## ⚙️ Installation
 
